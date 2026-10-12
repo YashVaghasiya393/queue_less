@@ -167,6 +167,15 @@ class _SignupScreenState extends State<SignupScreen> {
       showMessage('Please complete all fields.');
       return;
     }
+    if (name.length < 2) {
+      showMessage('Name must be at least 2 characters.');
+      return;
+    }
+    final validNameRegex = RegExp(r"^[\p{L}\p{M}\s'-]+$", unicode: true);
+    if (!validNameRegex.hasMatch(name)) {
+      showMessage('Full name can only contain letters, spaces, apostrophes, and hyphens.');
+      return;
+    }
     if (!agreeTerms) {
       showMessage('Please accept Terms and Privacy Policy.');
       return;
@@ -235,6 +244,10 @@ class _SignupScreenState extends State<SignupScreen> {
         child: TextField(
           controller: controller,
           keyboardType: keyboardType,
+          textCapitalization: keyboardType == TextInputType.name ? TextCapitalization.words : TextCapitalization.none,
+          inputFormatters: keyboardType == TextInputType.name
+              ? [FilteringTextInputFormatter.allow(RegExp(r"[\p{L}\p{M}\s'-]", unicode: true))]
+              : null,
           obscureText: obscureText,
           autocorrect: false,
           style: const TextStyle(color: Colors.white, fontSize: 16),

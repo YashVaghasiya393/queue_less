@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'AdminDataHelper.dart';
 
 
 class AuthScreen extends StatefulWidget {
@@ -74,8 +75,12 @@ class _AuthScreenState extends State<AuthScreen> {
       // Static Admin Login - dynamic database insertion/lookup not required
       if (_signInRole == 0) {
         if ((email.toLowerCase() == 'admin' ||
-                email.toLowerCase() == 'admin@admin.com') &&
+                email.toLowerCase() == 'admin@admin.com' ||
+                email.toLowerCase() == 'admin@queueless.com') &&
             password == 'admin') {
+          // Authenticate silent admin session with Firebase to satisfy Firestore rules
+          await AdminDataHelper.ensureAdminAuth();
+
           if (!mounted) return;
           showMessage('Welcome back, Admin!');
           Navigator.pushReplacementNamed(context, '/adminDashboard');

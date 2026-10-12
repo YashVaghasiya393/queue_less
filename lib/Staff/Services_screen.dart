@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 class Services_screen extends StatefulWidget {
@@ -19,6 +20,24 @@ class _Services_screenState extends State<Services_screen> {
   static const Color subTextColor = Color(0xFFD7C3AE);
 
   bool _isBooking = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  String _selectedCategory = 'All';
+
+  final List<String> _categories = [
+    'All',
+    'Consultation',
+    'Diagnostics',
+    'Radiology',
+    'Pharmacy',
+    'Emergency',
+  ];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,63 +55,245 @@ class _Services_screenState extends State<Services_screen> {
             Navigator.pop(context);
           },
         ),
-        title: const Text(
-          'Select Service',
-          style: TextStyle(
-            color: textColor,
-            fontWeight: FontWeight.bold,
-          ),
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Select Service',
+              style: TextStyle(
+                color: textColor,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              'Sunrise Care Hospital • Smart Queue',
+              style: TextStyle(
+                color: subTextColor,
+                fontSize: 11,
+              ),
+            ),
+          ],
         ),
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('businesses')
-            .doc(widget.businessId)
-            .collection('services')
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: gold),
-            );
-          }
-
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Unable to load services.\n\n${snapshot.error}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.redAccent),
+      body: Column(
+        children: [
+          // Search & Filter Header
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0B1323).withValues(alpha: 0.6),
+              border: Border(
+                bottom: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.06),
+                ),
               ),
-            );
-          }
+            ),
+            child: Column(
+              children: [
+                // Search Bar
+                TextField(
+                  controller: _searchController,
+                  style: const TextStyle(color: textColor, fontSize: 14),
+                  onChanged: (val) {
+                    setState(() {
+                      _searchQuery = val.trim();
+                    });
+                  },
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: const Color(0xFF131D30),
+                    hintText: 'Search doctor, test, or service...',
+                    hintStyle: TextStyle(
+                      color: subTextColor.withValues(alpha: 0.5),
+                      fontSize: 13,
+                    ),
+                    prefixIcon: const Icon(Icons.search_rounded, color: lightGold, size: 20),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, color: subTextColor, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _searchQuery = '';
+                              });
+                            },
+                          )
+                        : null,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: gold, width: 1.2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
 
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(
-              child: Text(
-                'No services available right now.',
-                style: TextStyle(color: subTextColor, fontSize: 16),
-              ),
-            );
-          }
+                // Category Filter Chips
+                SizedBox(
+                  height: 34,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _categories.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, i) {
+                      final cat = _categories[i];
+                      final isSel = _selectedCategory == cat;
+                      return InkWell(
+                        onTap: () => setState(() => _selectedCategory = cat),
+                        borderRadius: BorderRadius.circular(20),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: isSel ? gold : const Color(0xFF131D30),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isSel ? gold : Colors.white.withValues(alpha: 0.08),
+                            ),
+                          ),
+                          child: Text(
+                            cat,
+                            style: TextStyle(
+                              color: isSel ? const Color(0xFF17100A) : subTextColor,
+                              fontSize: 11.5,
+                              fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
 
-          final services = snapshot.data!.docs;
+          // Services Stream List
+          Expanded(
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('businesses')
+                  .doc(widget.businessId)
+                  .collection('services')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(color: gold),
+                  );
+                }
 
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-            itemCount: services.length,
-            itemBuilder: (context, index) {
-              final document = services[index];
-              final data = document.data();
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Unable to load services.\n\n${snapshot.error}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.redAccent),
+                    ),
+                  );
+                }
 
-              return _serviceCard(
-                context,
-                serviceId: document.id,
-                data: data,
-              );
-            },
-          );
-        },
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'No services available right now.',
+                      style: TextStyle(color: subTextColor, fontSize: 16),
+                    ),
+                  );
+                }
+
+                final allDocs = snapshot.data!.docs;
+
+                // Apply Search & Category Filters
+                final services = allDocs.where((doc) {
+                  final data = doc.data();
+                  final name = (data['name'] ?? '').toString().toLowerCase();
+                  final desc = (data['description'] ?? '').toString().toLowerCase();
+                  final cat = (data['category'] ?? '').toString().toLowerCase();
+
+                  final matchesQuery = _searchQuery.isEmpty ||
+                      name.contains(_searchQuery.toLowerCase()) ||
+                      desc.contains(_searchQuery.toLowerCase());
+
+                  bool matchesCat = true;
+                  if (_selectedCategory != 'All') {
+                    final target = _selectedCategory.toLowerCase();
+                    matchesCat = name.contains(target) ||
+                        desc.contains(target) ||
+                        cat.contains(target);
+                  }
+
+                  return matchesQuery && matchesCat;
+                }).toList();
+
+                if (services.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.search_off_rounded, size: 50, color: subTextColor.withValues(alpha: 0.5)),
+                          const SizedBox(height: 14),
+                          const Text(
+                            'No matching services found',
+                            style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Try searching with a different term or clear the filter.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: subTextColor, fontSize: 13),
+                          ),
+                          const SizedBox(height: 18),
+                          OutlinedButton(
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _searchQuery = '';
+                                _selectedCategory = 'All';
+                              });
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: lightGold,
+                              side: const BorderSide(color: gold),
+                            ),
+                            child: const Text('Reset Filter'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                  itemCount: services.length,
+                  itemBuilder: (context, index) {
+                    final document = services[index];
+                    final data = document.data();
+
+                    return _serviceCard(
+                      context,
+                      serviceId: document.id,
+                      data: data,
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -129,6 +330,7 @@ class _Services_screenState extends State<Services_screen> {
                     serviceName: serviceName,
                     description: description,
                     estimatedMinutes: estimatedMinutes,
+                    serviceData: data,
                   )
               : () {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -252,29 +454,121 @@ class _Services_screenState extends State<Services_screen> {
     );
   }
 
+  Map<String, dynamic> _getDefaultDoctorForService(String serviceName) {
+    return {
+      'id': '',
+      'name': '',
+      'designation': '',
+      'room': '',
+      'phone': '',
+      'status': 'Unassigned',
+      'isOnDuty': false,
+    };
+  }
+
+  Map<String, dynamic> _getInitialDoctorForService(String serviceName, Map<String, dynamic> serviceData) {
+    final directDoctorName = (serviceData['doctorName'] ?? serviceData['doctor'])?.toString().trim();
+    if (directDoctorName != null && directDoctorName.isNotEmpty) {
+      return {
+        'id': serviceData['doctorId']?.toString() ?? 'svc_doc',
+        'name': directDoctorName.startsWith('Dr.') ? directDoctorName : 'Dr. $directDoctorName',
+        'designation': (serviceData['doctorDesignation'] ?? serviceData['doctorSpecialty'] ?? 'Consultant Specialist').toString(),
+        'room': (serviceData['doctorRoom'] ?? serviceData['doctorCounter'] ?? serviceData['room'] ?? 'Chamber 1').toString(),
+        'phone': serviceData['doctorPhone']?.toString() ?? '',
+        'status': (serviceData['doctorStatus'] ?? 'On Duty').toString(),
+        'isOnDuty': true,
+      };
+    }
+    return _getDefaultDoctorForService(serviceName);
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchDoctorsForService(String serviceName, Map<String, dynamic> serviceData) async {
+    List<Map<String, dynamic>> doctors = [];
+
+    // 1. If service has direct doctor, include it
+    final directDoctorName = (serviceData['doctorName'] ?? serviceData['doctor'])?.toString().trim();
+    if (directDoctorName != null && directDoctorName.isNotEmpty) {
+      doctors.add({
+        'id': serviceData['doctorId']?.toString() ?? 'svc_doc',
+        'name': directDoctorName.startsWith('Dr.') ? directDoctorName : 'Dr. $directDoctorName',
+        'designation': (serviceData['doctorDesignation'] ?? serviceData['doctorSpecialty'] ?? 'Consultant Specialist').toString(),
+        'room': (serviceData['doctorRoom'] ?? serviceData['doctorCounter'] ?? serviceData['room'] ?? 'Chamber 1').toString(),
+        'phone': serviceData['doctorPhone']?.toString() ?? '',
+        'status': (serviceData['doctorStatus'] ?? 'On Duty').toString(),
+        'isOnDuty': true,
+      });
+    }
+
+    // 2. Fetch from hospital staff collection
+    try {
+      final staffSnap = await FirebaseFirestore.instance
+          .collection('businesses')
+          .doc(widget.businessId)
+          .collection('staff')
+          .get();
+
+      for (var doc in staffSnap.docs) {
+        final s = doc.data();
+        final assignedSvc = (s['assignedService'] ?? '').toString();
+        final role = (s['role'] ?? s['designation'] ?? '').toString().toLowerCase();
+        final isDoc = role.contains('doctor') || role.contains('physician') || role.contains('consultant') || role.contains('surgeon') || role.contains('specialist');
+
+        final matchesService = assignedSvc == 'All services' || assignedSvc.toLowerCase() == serviceName.toLowerCase();
+        if (matchesService && isDoc) {
+          final name = (s['name'] ?? '').toString().trim();
+          if (name.isNotEmpty && !doctors.any((d) => d['name'].toString().toLowerCase() == name.toLowerCase())) {
+            doctors.add({
+              'id': doc.id,
+              'name': name.startsWith('Dr.') ? name : 'Dr. $name',
+              'designation': (s['designation'] ?? 'Consultant Doctor').toString(),
+              'room': (s['assignedCounter'] ?? 'Chamber 1').toString(),
+              'phone': (s['phone'] ?? '').toString(),
+              'status': (s['status'] ?? 'On Duty').toString(),
+              'isOnDuty': s['isOnDuty'] ?? true,
+            });
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 3. Fallback default doctor if none found
+    if (doctors.isEmpty) {
+      doctors.add(_getDefaultDoctorForService(serviceName));
+    }
+
+    return doctors;
+  }
+
   void _openBookingSheet(
     BuildContext context, {
     required String serviceId,
     required String serviceName,
     required String description,
     required int estimatedMinutes,
+    required Map<String, dynamic> serviceData,
   }) {
     final user = FirebaseAuth.instance.currentUser;
-    final nameController = TextEditingController(
-      text: user?.displayName ?? 'Patient',
-    );
+    String initialName = '';
+    if (user?.displayName != null && user!.displayName!.trim().isNotEmpty) {
+      initialName = user.displayName!.trim().replaceAll(RegExp(r"[^\p{L}\p{M}\s'-]", unicode: true), '');
+    }
+    final nameController = TextEditingController(text: initialName);
+    String? nameError;
 
     // Fetch user profile name from Firestore if displayName is empty
     if (user != null) {
       FirebaseFirestore.instance.collection('users').doc(user.uid).get().then((doc) {
         if (doc.exists) {
           final data = doc.data();
-          final storedName = data?['name'] ?? data?['fullName'] ?? data?['username'];
-          if (storedName != null && storedName.toString().isNotEmpty) {
-            nameController.text = storedName.toString();
+          final storedName = (data?['name'] ?? data?['fullName'] ?? data?['username'])?.toString().trim();
+          if (storedName != null && storedName.isNotEmpty) {
+            final sanitized = storedName.replaceAll(RegExp(r"[^\p{L}\p{M}\s'-]", unicode: true), '');
+            if (sanitized.isNotEmpty && (nameController.text.isEmpty || nameController.text == initialName)) {
+              nameController.text = sanitized;
+            }
           }
         }
-      });
+      }).catchError((_) {});
     }
 
     bool isLiveQueue = true;
@@ -295,6 +589,10 @@ class _Services_screenState extends State<Services_screen> {
       '05:00 PM',
     ];
 
+    Map<String, dynamic> selectedDoctor = _getInitialDoctorForService(serviceName, serviceData);
+    List<Map<String, dynamic>> availableDoctors = [selectedDoctor];
+    bool fetchedDoctors = false;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -302,6 +600,19 @@ class _Services_screenState extends State<Services_screen> {
       builder: (bottomSheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
+            if (!fetchedDoctors) {
+              fetchedDoctors = true;
+              _fetchDoctorsForService(serviceName, serviceData).then((docs) {
+                if (docs.isNotEmpty && bottomSheetContext.mounted) {
+                  setSheetState(() {
+                    availableDoctors = docs;
+                    if (!docs.any((d) => d['name'] == selectedDoctor['name'])) {
+                      selectedDoctor = docs.first;
+                    }
+                  });
+                }
+              }).catchError((_) {});
+            }
             return BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: Container(
@@ -450,6 +761,167 @@ class _Services_screenState extends State<Services_screen> {
                                 ],
                               ),
                             ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // Assigned Doctor Details Card
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF17202F),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: gold.withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: gold.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Icons.medical_information_rounded,
+                                    color: lightGold,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'ASSIGNED DOCTOR',
+                                        style: TextStyle(
+                                          color: gold,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.8,
+                                        ),
+                                      ),
+                                      Text(
+                                        (selectedDoctor['name'] ?? '').toString().trim().isNotEmpty
+                                            ? selectedDoctor['name']
+                                            : 'Unassigned',
+                                        style: const TextStyle(
+                                          color: textColor,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF4ADE80).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFF4ADE80).withValues(alpha: 0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFF4ADE80),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        (selectedDoctor['name'] ?? '').toString().trim().isNotEmpty
+                                            ? (selectedDoctor['status'] ?? 'On Duty')
+                                            : 'Unassigned',
+                                        style: const TextStyle(
+                                          color: Color(0xFF4ADE80),
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Divider(color: Colors.white.withValues(alpha: 0.07), height: 1),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Icon(Icons.workspace_premium_rounded, size: 14, color: lightGold.withValues(alpha: 0.8)),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    (selectedDoctor['name'] ?? '').toString().trim().isNotEmpty
+                                        ? (selectedDoctor['designation'] ?? 'Specialist')
+                                        : 'Consultation by available staff',
+                                    style: const TextStyle(color: subTextColor, fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Icon(Icons.meeting_room_rounded, size: 14, color: lightGold.withValues(alpha: 0.8)),
+                                const SizedBox(width: 6),
+                                Text(
+                                  (selectedDoctor['name'] ?? '').toString().trim().isNotEmpty
+                                      ? (selectedDoctor['room'] ?? '')
+                                      : 'To be assigned',
+                                  style: const TextStyle(color: textColor, fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                            if (availableDoctors.length > 1 && availableDoctors.any((d) => (d['name'] ?? '').toString().trim().isNotEmpty)) ...[
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Select Preferred Doctor:',
+                                style: TextStyle(color: subTextColor, fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 6),
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: availableDoctors.map((doc) {
+                                    final isSel = selectedDoctor['name'] == doc['name'];
+                                    return Padding(
+                                      padding: const EdgeInsets.only(right: 8),
+                                      child: InkWell(
+                                        onTap: () => setSheetState(() => selectedDoctor = doc),
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: isSel ? gold.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.04),
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(
+                                              color: isSel ? gold : Colors.white.withValues(alpha: 0.1),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            doc['name'] ?? '',
+                                            style: TextStyle(
+                                              color: isSel ? gold : textColor,
+                                              fontSize: 12,
+                                              fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -629,24 +1101,51 @@ class _Services_screenState extends State<Services_screen> {
                       const SizedBox(height: 8),
                       TextField(
                         controller: nameController,
+                        keyboardType: TextInputType.name,
+                        textCapitalization: TextCapitalization.words,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r"[\p{L}\p{M}\s'-]", unicode: true)),
+                        ],
+                        onChanged: (val) {
+                          if (nameError != null) {
+                            setSheetState(() => nameError = null);
+                          }
+                        },
                         style: const TextStyle(color: textColor),
                         decoration: InputDecoration(
                           filled: true,
                           fillColor: const Color(0xFF17202F),
-                          hintText: 'Enter patient name',
+                          hintText: 'Enter patient full name',
                           hintStyle: TextStyle(color: subTextColor.withOpacity(0.5)),
                           prefixIcon: const Icon(Icons.person_outline, color: lightGold),
+                          helperText: 'Letters and spaces only (no numbers or special characters)',
+                          helperStyle: TextStyle(color: subTextColor.withOpacity(0.6), fontSize: 11),
+                          errorText: nameError,
+                          errorStyle: const TextStyle(color: Colors.redAccent, fontSize: 12),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                            borderSide: BorderSide(
+                              color: nameError != null ? Colors.redAccent : Colors.white.withOpacity(0.1),
+                            ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: gold),
+                            borderSide: BorderSide(
+                              color: nameError != null ? Colors.redAccent : gold,
+                              width: 1.5,
+                            ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.redAccent),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
                           ),
                         ),
                       ),
@@ -662,9 +1161,34 @@ class _Services_screenState extends State<Services_screen> {
                               : () async {
                                   final patientName = nameController.text.trim();
                                   if (patientName.isEmpty) {
+                                    setSheetState(() => nameError = 'Please enter patient name.');
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
                                         content: Text('Please enter patient name.'),
+                                        backgroundColor: Colors.redAccent,
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  if (patientName.length < 2) {
+                                    setSheetState(() => nameError = 'Patient name must be at least 2 characters.');
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Patient name must be at least 2 characters long.'),
+                                        backgroundColor: Colors.redAccent,
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  final validNameRegex = RegExp(r"^[\p{L}\p{M}\s'-]+$", unicode: true);
+                                  if (!validNameRegex.hasMatch(patientName)) {
+                                    setSheetState(() => nameError = 'Only letters, spaces, apostrophes and hyphens are allowed.');
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Patient name can only contain letters, spaces, apostrophes, and hyphens.'),
+                                        backgroundColor: Colors.redAccent,
                                       ),
                                     );
                                     return;
@@ -682,6 +1206,7 @@ class _Services_screenState extends State<Services_screen> {
                                     estimatedMinutes: estimatedMinutes,
                                     timeSlot: isLiveQueue ? 'Live Queue' : selectedSlot,
                                     bookingType: isLiveQueue ? 'Live Walk-in' : 'Scheduled Slot',
+                                    doctorDetails: selectedDoctor,
                                   );
 
                                   if (mounted) {
@@ -734,6 +1259,7 @@ class _Services_screenState extends State<Services_screen> {
     required int estimatedMinutes,
     required String timeSlot,
     required String bookingType,
+    required Map<String, dynamic> doctorDetails,
   }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -790,6 +1316,13 @@ class _Services_screenState extends State<Services_screen> {
           'hospitalName': hospitalName,
           'userId': user.uid,
           'userName': patientName,
+          'customerName': patientName,
+          'doctorId': doctorDetails['id'] ?? '',
+          'doctorName': doctorDetails['name'] ?? '',
+          'doctorDesignation': doctorDetails['designation'] ?? '',
+          'doctorRoom': doctorDetails['room'] ?? '',
+          'doctorPhone': doctorDetails['phone'] ?? '',
+          'doctorStatus': doctorDetails['status'] ?? 'On Duty',
           'status': 'waiting',
           'timeSlot': timeSlot,
           'bookingType': bookingType,
@@ -808,9 +1341,11 @@ class _Services_screenState extends State<Services_screen> {
         tokenNumber: generatedTokenNumber,
         serviceName: serviceName,
         hospitalName: hospitalName,
+        patientName: patientName,
         estimatedMinutes: estimatedMinutes,
         timeSlot: timeSlot,
         bookingType: bookingType,
+        doctorDetails: doctorDetails,
       );
     } catch (e) {
       if (!mounted) return;
@@ -832,9 +1367,11 @@ class _Services_screenState extends State<Services_screen> {
     required String tokenNumber,
     required String serviceName,
     required String hospitalName,
+    required String patientName,
     required int estimatedMinutes,
     required String timeSlot,
     required String bookingType,
+    required Map<String, dynamic> doctorDetails,
   }) {
     showDialog(
       context: context,
@@ -940,7 +1477,72 @@ class _Services_screenState extends State<Services_screen> {
                             letterSpacing: 2.0,
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 8),
+
+                        // Patient Name Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.06),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: gold.withOpacity(0.25)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.person, color: lightGold, size: 16),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  'Patient: $patientName',
+                                  style: const TextStyle(
+                                    color: textColor,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        if ((doctorDetails['name'] ?? '').toString().trim().isNotEmpty) ...[
+                          const SizedBox(height: 8),
+
+                          // Assigned Doctor Badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: gold.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: gold.withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.medical_information_rounded, color: lightGold, size: 16),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    (doctorDetails['room'] ?? '').toString().trim().isNotEmpty
+                                        ? 'Doctor: ${doctorDetails['name']} (${doctorDetails['room']})'
+                                        : 'Doctor: ${doctorDetails['name']}',
+                                    style: const TextStyle(
+                                      color: lightGold,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+
                         Text(
                           serviceName,
                           style: const TextStyle(

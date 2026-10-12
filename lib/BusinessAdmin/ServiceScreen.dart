@@ -1,7 +1,7 @@
 import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'AdminDataHelper.dart';
 
 class ServicesScreen extends StatefulWidget {
   const ServicesScreen({super.key});
@@ -25,19 +25,13 @@ class _ServicesScreenState extends State<ServicesScreen> {
   }
 
   Future<void> loadBusinessId() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-
-    if (uid == null) return;
-
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
+    await AdminDataHelper.ensureAdminAuth();
+    final id = await AdminDataHelper.getBusinessId();
 
     if (!mounted) return;
 
     setState(() {
-      businessId = userDoc.data()?['businessId'];
+      businessId = id;
     });
   }
 
@@ -428,6 +422,9 @@ class _ServicesScreenState extends State<ServicesScreen> {
     final nameController = TextEditingController();
     final descriptionController = TextEditingController();
     final timeController = TextEditingController();
+    final doctorNameController = TextEditingController();
+    final doctorDesignationController = TextEditingController();
+    final doctorRoomController = TextEditingController();
     bool isActive = true;
 
     await showDialog(
@@ -448,44 +445,64 @@ class _ServicesScreenState extends State<ServicesScreen> {
                 ),
               ),
               content: SizedBox(
-                width: 400,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _dialogField(
-                      controller: nameController,
-                      label: 'Service Name',
-                      hint: 'Example: Doctor Consultation',
-                    ),
-                    const SizedBox(height: 14),
-                    _dialogField(
-                      controller: descriptionController,
-                      label: 'Description',
-                      hint: 'Example: Consultation with a doctor',
-                    ),
-                    const SizedBox(height: 14),
-                    _dialogField(
-                      controller: timeController,
-                      label: 'Estimated Time (minutes)',
-                      hint: 'Example: 20',
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 12),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Service is active',
-                        style: TextStyle(color: textColor),
+                width: 440,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _dialogField(
+                        controller: nameController,
+                        label: 'Service Name',
+                        hint: 'Example: Doctor Consultation',
                       ),
-                      value: isActive,
-                      activeColor: gold,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          isActive = value;
-                        });
-                      },
-                    ),
-                  ],
+                      const SizedBox(height: 14),
+                      _dialogField(
+                        controller: descriptionController,
+                        label: 'Description',
+                        hint: 'Example: Consultation with a doctor',
+                      ),
+                      const SizedBox(height: 14),
+                      _dialogField(
+                        controller: timeController,
+                        label: 'Estimated Time (minutes)',
+                        hint: 'Example: 20',
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 14),
+                      _dialogField(
+                        controller: doctorNameController,
+                        label: 'Assigned Doctor Name',
+                        hint: 'Example: Dr. Sarah Jenkins',
+                      ),
+                      const SizedBox(height: 14),
+                      _dialogField(
+                        controller: doctorDesignationController,
+                        label: 'Doctor Specialization / Role',
+                        hint: 'Example: Senior Cardiologist',
+                      ),
+                      const SizedBox(height: 14),
+                      _dialogField(
+                        controller: doctorRoomController,
+                        label: 'Chamber / Room / Counter',
+                        hint: 'Example: Chamber 4 (OPD Wing B)',
+                      ),
+                      const SizedBox(height: 12),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Service is active',
+                          style: TextStyle(color: textColor),
+                        ),
+                        value: isActive,
+                        activeColor: gold,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            isActive = value;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -522,6 +539,9 @@ class _ServicesScreenState extends State<ServicesScreen> {
                       'description': description,
                       'estimatedMinutes': minutes,
                       'isActive': isActive,
+                      'doctorName': doctorNameController.text.trim(),
+                      'doctorDesignation': doctorDesignationController.text.trim(),
+                      'doctorRoom': doctorRoomController.text.trim(),
                       'createdAt': FieldValue.serverTimestamp(),
                     });
 
@@ -542,6 +562,9 @@ class _ServicesScreenState extends State<ServicesScreen> {
     nameController.dispose();
     descriptionController.dispose();
     timeController.dispose();
+    doctorNameController.dispose();
+    doctorDesignationController.dispose();
+    doctorRoomController.dispose();
   }
 
   Widget _dialogField({
@@ -689,6 +712,16 @@ class _ServicesScreenState extends State<ServicesScreen> {
                           ),
                           DataColumn(
                             label: Text(
+                              'ASSIGNED DOCTOR',
+                              style: TextStyle(
+                                color: Color(0xFFD7C3AE),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
                               'STATUS',
                               style: TextStyle(
                                 color: Color(0xFFD7C3AE),
@@ -717,6 +750,9 @@ class _ServicesScreenState extends State<ServicesScreen> {
                             service['description'] ?? '',
                             ((service['estimatedMinutes'] as num?)?.toInt() ?? 0) as int,
                             service['isActive'] ?? true,
+                            doctorName: service['doctorName'] ?? '',
+                            doctorDesignation: service['doctorDesignation'] ?? '',
+                            doctorRoom: service['doctorRoom'] ?? '',
                           );
                         }).toList(),
                       ),
@@ -735,8 +771,11 @@ class _ServicesScreenState extends State<ServicesScreen> {
       String oldName,
       String oldDescription,
       int oldMinutes,
-      bool oldIsActive,
-      ) async {
+      bool oldIsActive, {
+      String oldDoctorName = '',
+      String oldDoctorDesignation = '',
+      String oldDoctorRoom = '',
+      }) async {
     final nameController = TextEditingController(text: oldName);
     final descriptionController = TextEditingController(
       text: oldDescription,
@@ -744,6 +783,10 @@ class _ServicesScreenState extends State<ServicesScreen> {
     final timeController = TextEditingController(
       text: oldMinutes.toString(),
     );
+    final doctorNameController = TextEditingController(text: oldDoctorName);
+    final doctorDesignationController =
+        TextEditingController(text: oldDoctorDesignation);
+    final doctorRoomController = TextEditingController(text: oldDoctorRoom);
 
     bool isActive = oldIsActive;
 
@@ -766,42 +809,63 @@ class _ServicesScreenState extends State<ServicesScreen> {
               ),
               content: SizedBox(
                 width: 400,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _dialogField(
-                      controller: nameController,
-                      label: 'Service Name',
-                      hint: 'Service name',
-                    ),
-                    const SizedBox(height: 14),
-                    _dialogField(
-                      controller: descriptionController,
-                      label: 'Description',
-                      hint: 'Service description',
-                    ),
-                    const SizedBox(height: 14),
-                    _dialogField(
-                      controller: timeController,
-                      label: 'Estimated Time (minutes)',
-                      hint: 'Example: 20',
-                      keyboardType: TextInputType.number,
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Service is active',
-                        style: TextStyle(color: textColor),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _dialogField(
+                        controller: nameController,
+                        label: 'Service Name',
+                        hint: 'Service name',
                       ),
-                      value: isActive,
-                      activeColor: gold,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          isActive = value;
-                        });
-                      },
-                    ),
-                  ],
+                      const SizedBox(height: 14),
+                      _dialogField(
+                        controller: descriptionController,
+                        label: 'Description',
+                        hint: 'Service description',
+                      ),
+                      const SizedBox(height: 14),
+                      _dialogField(
+                        controller: timeController,
+                        label: 'Estimated Time (minutes)',
+                        hint: 'Example: 20',
+                        keyboardType: TextInputType.number,
+                      ),
+                      const SizedBox(height: 14),
+                      _dialogField(
+                        controller: doctorNameController,
+                        label: 'Assigned Doctor Name',
+                        hint: 'e.g. Dr. Sarah Jenkins',
+                      ),
+                      const SizedBox(height: 14),
+                      _dialogField(
+                        controller: doctorDesignationController,
+                        label: 'Doctor Specialization',
+                        hint: 'e.g. Senior Cardiologist',
+                      ),
+                      const SizedBox(height: 14),
+                      _dialogField(
+                        controller: doctorRoomController,
+                        label: 'Consultation Room / Chamber',
+                        hint: 'e.g. Room 204, OPD Block B',
+                      ),
+                      const SizedBox(height: 10),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Service is active',
+                          style: TextStyle(color: textColor),
+                        ),
+                        value: isActive,
+                        activeColor: gold,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            isActive = value;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -837,6 +901,9 @@ class _ServicesScreenState extends State<ServicesScreen> {
                       'description': description,
                       'estimatedMinutes': minutes,
                       'isActive': isActive,
+                      'doctorName': doctorNameController.text.trim(),
+                      'doctorDesignation': doctorDesignationController.text.trim(),
+                      'doctorRoom': doctorRoomController.text.trim(),
                       'updatedAt': FieldValue.serverTimestamp(),
                     });
 
@@ -857,6 +924,9 @@ class _ServicesScreenState extends State<ServicesScreen> {
     nameController.dispose();
     descriptionController.dispose();
     timeController.dispose();
+    doctorNameController.dispose();
+    doctorDesignationController.dispose();
+    doctorRoomController.dispose();
   }
 
   Future<void> deleteService(String serviceId, String serviceName) async {
@@ -915,8 +985,11 @@ class _ServicesScreenState extends State<ServicesScreen> {
       String name,
       String description,
       int minutes,
-      bool isActive,
-      ) {
+      bool isActive, {
+      String doctorName = '',
+      String doctorDesignation = '',
+      String doctorRoom = '',
+      }) {
     final Color statusColor =
     isActive ? const Color(0xFF4ADE80) : const Color(0xFFFF7B7B);
 
@@ -965,6 +1038,44 @@ class _ServicesScreenState extends State<ServicesScreen> {
           ),
         ),
         DataCell(
+          doctorName.isNotEmpty
+              ? Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.person_outline, size: 14, color: lightGold),
+                        const SizedBox(width: 4),
+                        Text(
+                          doctorName,
+                          style: const TextStyle(
+                            color: textColor,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (doctorDesignation.isNotEmpty || doctorRoom.isNotEmpty)
+                      Text(
+                        [doctorDesignation, doctorRoom]
+                            .where((s) => s.isNotEmpty)
+                            .join(' • '),
+                        style: const TextStyle(color: subTextColor, fontSize: 11),
+                      ),
+                  ],
+                )
+              : const Text(
+                  'Auto-assigned',
+                  style: TextStyle(
+                    color: subTextColor,
+                    fontStyle: FontStyle.italic,
+                    fontSize: 12,
+                  ),
+                ),
+        ),
+        DataCell(
           Text(
             isActive ? 'Active' : 'Inactive',
             style: TextStyle(
@@ -985,6 +1096,9 @@ class _ServicesScreenState extends State<ServicesScreen> {
                     description,
                     minutes,
                     isActive,
+                    oldDoctorName: doctorName,
+                    oldDoctorDesignation: doctorDesignation,
+                    oldDoctorRoom: doctorRoom,
                   );
                 },
                 icon: const Icon(
